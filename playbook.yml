@@ -1,0 +1,61 @@
+---
+- hosts: all
+  user: ie-user
+  sudo: yes
+  vars:
+    mysql_zabbix_password:
+
+  tasks:
+    - name: install
+      yum: name={{ item }} state=installed
+      with_items:
+        - http://repo.zabbix.com/zabbix/3.0/rhel/7/x86_64/zabbix-release-3.0-1.el7.noarch.rpm
+        - zabbix-server-mysql 
+        - zabbix-web-mysql
+        - zabbix-web-japanese 
+        - zabbix-agent
+        - mariadb-server
+        - MySQL-python
+
+    - name: server.cnf
+      copy: src=server.cnf dest=/etc/my.cnf.d/server.cnf owner=root group=root mode=644
+
+    - name: mariadb service start
+      service: name=mariadb state=started enabled=yes
+
+    - name: db create
+      mysql_db:
+        name: zabbix
+        state: present
+
+    - name: db_user create
+      mysql_user:
+        name: zabbix
+        password: "{{ mysql_zabbix_password }}"
+        priv: '*.*:ALL,GRANT'
+        state: present
+
+    - name: db eat data
+      shell: zcat /usr/share/doc/zabbix-server-mysql*/create.sql.gz | mysql -uroot zabbix
+
+    - name: zabbix_server.conf
+      replace:
+        dest='/etc/zabbix/zabbix_server.conf'
+        regexp='^# DBPassword=$'
+        replace='DBPassword={{ mysql_zabbix_password }}'
+
+    - name: zabbix.conf
+      copy: src=zabbix.conf dest=/etc/httpd/conf.d/zabbix.conf owner=root group=root mode=644
+
+    - name: port
+      firewalld: port={{ item }} permanent=true state=enabled immediate=true
+      with_items:
+        - 10050/tcp
+        - 10051/tcp
+
+    - name: zabbix start
+      service: name={{ item }} state=started enabled=yes
+      with_items:
+        - zabbix-server
+        - zabbix-agent
+        - httpd
