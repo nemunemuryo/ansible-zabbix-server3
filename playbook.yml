@@ -1,15 +1,17 @@
 ---
 - hosts: all
-  user: ie-user
+  user: root
   sudo: yes
   vars:
     mysql_zabbix_password:
 
   tasks:
+    - name: install repo
+      yum: name=http://repo.zabbix.com/zabbix/3.0/rhel/7/x86_64/zabbix-release-3.0-1.el7.noarch.rpm
+
     - name: install
       yum: name={{ item }} state=installed
       with_items:
-        - http://repo.zabbix.com/zabbix/3.0/rhel/7/x86_64/zabbix-release-3.0-1.el7.noarch.rpm
         - zabbix-server-mysql 
         - zabbix-web-mysql
         - zabbix-web-japanese 
@@ -44,14 +46,18 @@
         regexp='^# DBPassword=$'
         replace='DBPassword={{ mysql_zabbix_password }}'
 
+
     - name: zabbix.conf
       copy: src=zabbix.conf dest=/etc/httpd/conf.d/zabbix.conf owner=root group=root mode=644
 
-    - name: port
+    - name: firewall port
       firewalld: port={{ item }} permanent=true state=enabled immediate=true
       with_items:
         - 10050/tcp
         - 10051/tcp
+
+    - name: firewall http
+      firewalld: service=http permanent=true state=enabled immediate=true
 
     - name: zabbix start
       service: name={{ item }} state=started enabled=yes
